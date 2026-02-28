@@ -1,0 +1,292 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Binance-inspired color scheme for CITARION */
+:root {
+  /* Light theme - Binance style */
+  --background: 0 0% 98%;           /* #FAFAFA */
+  --foreground: 220 20% 10%;        /* Dark text */
+  --card: 0 0% 100%;                /* #FFFFFF */
+  --card-foreground: 220 20% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 20% 10%;
+  
+  /* Primary: Binance Gold #F0B90B */
+  --primary: 45 94% 50%;
+  --primary-foreground: 220 20% 10%;
+  
+  --secondary: 220 15% 95%;
+  --secondary-foreground: 220 20% 10%;
+  --muted: 220 15% 95%;
+  --muted-foreground: 220 10% 45%;
+  --accent: 220 15% 95%;
+  --accent-foreground: 220 20% 10%;
+  
+  /* Success: Binance Green #0ECB81 */
+  --success: 150 90% 46%;
+  --success-foreground: 0 0% 100%;
+  
+  /* Destructive: Binance Red #F6465D */
+  --destructive: 352 91% 62%;
+  --destructive-foreground: 0 0% 100%;
+  
+  --border: 220 15% 90%;
+  --input: 220 15% 90%;
+  --ring: 45 94% 50%;
+  --radius: 0.5rem;
+  
+  /* Warning: Binance Gold */
+  --warning: 45 94% 50%;
+  --warning-foreground: 220 20% 10%;
+  
+  /* Chart colors */
+  --chart-1: 45 94% 50%;   /* Gold */
+  --chart-2: 352 91% 62%;  /* Red */
+  --chart-3: 150 90% 46%;  /* Green */
+  --chart-4: 200 90% 50%;  /* Blue */
+  --chart-5: 270 70% 60%;  /* Purple */
+}
+
+.dark {
+  /* Dark theme - Binance style */
+  --background: 220 20% 5%;         /* #0B0E11 */
+  --foreground: 0 0% 95%;           /* Light text */
+  --card: 220 15% 10%;              /* #1E2329 */
+  --card-foreground: 0 0% 95%;
+  --popover: 220 15% 10%;
+  --popover-foreground: 0 0% 95%;
+  
+  /* Primary: Binance Gold #F0B90B - same in dark */
+  --primary: 45 94% 50%;
+  --primary-foreground: 220 20% 5%;
+  
+  --secondary: 220 15% 15%;         /* #2B3139 */
+  --secondary-foreground: 0 0% 95%;
+  --muted: 220 15% 15%;
+  --muted-foreground: 220 10% 55%;
+  --accent: 220 15% 15%;
+  --accent-foreground: 0 0% 95%;
+  
+  /* Success: Binance Green #0ECB81 */
+  --success: 150 90% 46%;
+  --success-foreground: 0 0% 100%;
+  
+  /* Destructive: Binance Red #F6465D */
+  --destructive: 352 91% 62%;
+  --destructive-foreground: 0 0% 100%;
+  
+  --border: 220 15% 20%;            /* #2B3139 */
+  --input: 220 15% 20%;
+  --ring: 45 94% 50%;
+  
+  /* Warning: Binance Gold */
+  --warning: 45 94% 50%;
+  --warning-foreground: 220 20% 5%;
+  
+  /* Chart colors - same for dark */
+  --chart-1: 45 94% 50%;   /* Gold */
+  --chart-2: 352 91% 62%;  /* Red */
+  --chart-3: 150 90% 46%;  /* Green */
+  --chart-4: 200 90% 50%;  /* Blue */
+  --chart-5: 270 70% 60%;  /* Purple */
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Custom scrollbar - Binance style */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.4);
+  }
+  50% {
+    box-shadow: 0 0 20px 5px hsl(var(--primary) / 0.2);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes count-up {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-count-up {
+  animation: count-up 0.5s ease-out;
+}
+
+/* Number animation for PnL - Binance colors */
+.pnl-positive {
+  @apply text-green-500 dark:text-[#0ECB81];
+}
+
+.pnl-negative {
+  @apply text-red-500 dark:text-[#F6465D];
+}
+
+/* Card hover effects */
+.card-hover {
+  @apply transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:scale-[1.01];
+}
+
+/* Gradient backgrounds - Binance Gold theme */
+.gradient-primary {
+  background: linear-gradient(135deg, #F0B90B 0%, #D4A00A 100%);
+}
+
+.gradient-success {
+  background: linear-gradient(135deg, #0ECB81 0%, #0BA06A 100%);
+}
+
+.gradient-danger {
+  background: linear-gradient(135deg, #F6465D 0%, #D13A4E 100%);
+}
+
+.gradient-warning {
+  background: linear-gradient(135deg, #F0B90B 0%, #D4A00A 100%);
+}
+
+/* Gold gradient for logo and highlights */
+.gradient-gold {
+  background: linear-gradient(135deg, #F0B90B 0%, #FCD535 50%, #F0B90B 100%);
+}
+
+/* Demo badge styling - Binance amber */
+.demo-badge {
+  @apply bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30;
+}
+
+.real-badge {
+  @apply bg-green-500/20 text-[#0ECB81] border border-green-500/30;
+}
+
+/* Status indicators */
+.status-active {
+  @apply w-2 h-2 rounded-full bg-[#0ECB81] animate-pulse;
+}
+
+.status-inactive {
+  @apply w-2 h-2 rounded-full bg-gray-400;
+}
+
+.status-pending {
+  @apply w-2 h-2 rounded-full bg-[#F0B90B] animate-pulse;
+}
+
+/* Binance-style button hover */
+.btn-binance {
+  @apply transition-all duration-150 hover:brightness-110 active:scale-[0.98];
+}
+
+/* Sidebar styling */
+.sidebar-logo {
+  background: linear-gradient(135deg, #F0B90B 0%, #FCD535 100%);
+}
+
+/* Table row hover */
+.table-row-hover {
+  @apply hover:bg-secondary/50 transition-colors;
+}
+
+/* Input focus - Binance gold ring */
+input:focus, textarea:focus, select:focus {
+  @apply ring-1 ring-primary/50 border-primary/50;
+}
+
+/* Custom selection color */
+::selection {
+  background: hsl(var(--primary) / 0.3);
+  color: hsl(var(--foreground));
+}
+
+/* Hide TradingView attribution logo in lightweight-charts */
+.hide-tv-logo a,
+.hide-tv-logo a[href*="tradingview"],
+.hide-tv-logo a[href*="tradingview.com"],
+.tv-lightweight-charts a,
+.tv-lightweight-charts a[href*="tradingview"],
+div[data-testid="attribution"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
