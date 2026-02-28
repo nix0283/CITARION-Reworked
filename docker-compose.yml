@@ -1,0 +1,169 @@
+version: '3.8'
+
+services:
+  # ==================== MAIN APPLICATION ====================
+  citarion:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: citarion-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=file:/app/data/dev.db
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - TRADINGVIEW_WEBHOOK_SECRET=${TRADINGVIEW_WEBHOOK_SECRET}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - postgres
+      - redis
+
+  # ==================== DATABASE (PostgreSQL) ====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: citarion-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-citarion}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-citarion}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups/db:/backups
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-citarion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== CACHE (Redis) ====================
+  redis:
+    image: redis:7-alpine
+    container_name: citarion-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==================== MONITORING (Grafana) ====================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: citarion-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    depends_on:
+      - postgres
+
+  # ==================== METRICS (Prometheus) ====================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: citarion-prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    restart: unless-stopped
+    networks:
+      - citarion-network
+
+  # ==================== REVERSE PROXY (Nginx) ====================
+  nginx:
+    image: nginx:alpine
+    container_name: citarion-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    depends_on:
+      - citarion
+
+  # ==================== BACKUP SERVICE ====================
+  backup:
+    image: prodrigestivill/postgres-backup-local:15
+    container_name: citarion-backup
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=${DB_NAME:-citarion}
+      - POSTGRES_USER=${DB_USER:-citarion}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+      - BACKUP_KEEP_MONTHS=6
+    volumes:
+      - ./backups/db:/backups
+    restart: unless-stopped
+    networks:
+      - citarion-network
+    depends_on:
+      - postgres
+
+# ==================== VOLUMES ====================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  grafana_data:
+    driver: local
+  prometheus_data:
+    driver: local
+
+# ==================== NETWORKS ====================
+networks:
+  citarion-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/ohlcv-sync?timeframes=1h,4h,1d&daysBack=3",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/ohlcv-sync?timeframes=1m,5m,15m&daysBack=1",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/prices",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/funding",
+      "schedule": "0 */8 * * *"
+    }
+  ]
+}
