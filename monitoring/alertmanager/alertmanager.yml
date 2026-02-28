@@ -1,0 +1,263 @@
+# Alertmanager Configuration for CITARION
+# 
+# Routes alerts to:
+# - Slack (production critical alerts)
+# - Telegram (all alerts for dev/testing)
+# - Email (fallback for critical)
+#
+# Documentation: https://prometheus.io/docs/alerting/latest/alertmanager/
+
+global:
+  # Default settings for all receivers
+  resolve_timeout: 5m
+  slack_api_url: '${SLACK_WEBHOOK_URL}'
+  
+  # Telegram settings (via bot API)
+  # Note: Telegram integration uses webhook or bot API
+  telegram_api_url: 'https://api.telegram.org'
+
+# Templates for alert messages
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# ==================== ROUTING ====================
+
+route:
+  # Default receiver for unmatched alerts
+  receiver: 'telegram-all'
+  group_by: ['alertname', 'severity', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  
+  # Child routes for specific alert types
+  routes:
+    # Critical alerts → Slack + Telegram + Email
+    - match:
+        severity: critical
+      receiver: 'critical-multi'
+      group_wait: 10s
+      repeat_interval: 1h
+      
+    # Trading-specific alerts → Slack channel
+    - match:
+        service: trading
+      receiver: 'slack-trading'
+      group_by: ['alertname', 'symbol', 'exchange']
+      
+    # Infrastructure alerts → Slack infra channel
+    - match:
+        service: infrastructure
+      receiver: 'slack-infra'
+      
+    # Warning alerts → Telegram only (less noisy)
+    - match:
+        severity: warning
+      receiver: 'telegram-warnings'
+      repeat_interval: 2h
+      
+    # Logging alerts → Telegram
+    - match:
+        service: loki
+      receiver: 'telegram-logging'
+
+# ==================== RECEIVERS ====================
+
+receivers:
+  # ==================== TELEGRAM RECEIVERS ====================
+  
+  - name: 'telegram-all'
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: '${TELEGRAM_CHAT_ID}'
+        parse_mode: 'MarkdownV2'
+        send_resolved: true
+        message: |
+          *🚨 Alert: {{ .CommonLabels.alertname }}*
+          
+          *Severity:* {{ .CommonLabels.severity }}
+          *Service:* {{ .CommonLabels.service }}
+          *Instance:* {{ .CommonLabels.instance }}
+          
+          {{ range .Alerts }}
+          *Description:* {{ .Annotations.description }}
+          *Summary:* {{ .Annotations.summary }}
+          {{ if .Annotations.runbook_url }}
+          *Runbook:* {{ .Annotations.runbook_url }}
+          {{ end }}
+          {{ end }}
+          
+          _Triggered: {{ .StartsAt.Format "2006-01-02 15:04:05" }}_
+
+  - name: 'telegram-warnings'
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: '${TELEGRAM_CHAT_ID}'
+        parse_mode: 'MarkdownV2'
+        send_resolved: true
+        message: |
+          *⚠️ Warning: {{ .CommonLabels.alertname }}*
+          
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          {{ end }}
+
+  - name: 'telegram-logging'
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: '${TELEGRAM_LOGS_CHAT_ID}'
+        parse_mode: 'MarkdownV2'
+        send_resolved: false
+
+  # ==================== SLACK RECEIVERS ====================
+  
+  - name: 'slack-trading'
+    slack_configs:
+      - channel: '#citarion-trading-alerts'
+        send_resolved: true
+        title: '{{ if eq .CommonLabels.severity "critical" }}🔴{{ else }}🟡{{ end }} {{ .CommonLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        fields:
+          - title: 'Severity'
+            value: '{{ .CommonLabels.severity }}'
+            short: true
+          - title: 'Service'
+            value: '{{ .CommonLabels.service }}'
+            short: true
+          - title: 'Exchange'
+            value: '{{ .CommonLabels.exchange }}'
+            short: true
+          - title: 'Symbol'
+            value: '{{ .CommonLabels.symbol }}'
+            short: true
+        actions:
+          - type: 'button'
+            text: 'View Dashboard'
+            url: '${GRAFANA_URL}/d/citarion-prod-main'
+          - type: 'button'
+            text: 'View Runbook'
+            url: '{{ .CommonAnnotations.runbook_url }}'
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else }}warning{{ end }}'
+
+  - name: 'slack-infra'
+    slack_configs:
+      - channel: '#citarion-infra-alerts'
+        send_resolved: true
+        title: '🔧 {{ .CommonLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        fields:
+          - title: 'Severity'
+            value: '{{ .CommonLabels.severity }}'
+            short: true
+          - title: 'Instance'
+            value: '{{ .CommonLabels.instance }}'
+            short: true
+        color: '{{ if eq .CommonLabels.severity "critical" }}danger{{ else }}#FFA500{{ end }}'
+
+  - name: 'critical-multi'
+    # Send to multiple channels for critical alerts
+    slack_configs:
+      - channel: '#citarion-critical'
+        send_resolved: true
+        title: '🔴 CRITICAL: {{ .CommonLabels.alertname }}'
+        text: |
+          *Alert:* {{ .CommonLabels.alertname }}
+          *Service:* {{ .CommonLabels.service }}
+          *Instance:* {{ .CommonLabels.instance }}
+          
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          {{ if .Annotations.runbook_url }}
+          <{{ .Annotations.runbook_url }}|View Runbook>
+          {{ end }}
+          {{ end }}
+        color: 'danger'
+        actions:
+          - type: 'button'
+            text: 'Acknowledge'
+            url: '${GRAFANA_URL}/alerting'
+    
+    telegram_configs:
+      - bot_token: '${TELEGRAM_BOT_TOKEN}'
+        chat_id: '${TELEGRAM_CRITICAL_CHAT_ID}'
+        parse_mode: 'MarkdownV2'
+        send_resolved: true
+        message: |
+          *🔴 CRITICAL ALERT*
+          
+          *{{ .CommonLabels.alertname }}*
+          
+          {{ range .Alerts }}
+          {{ .Annotations.description }}
+          {{ end }}
+          
+          <{{ .CommonAnnotations.runbook_url }}|Runbook>
+    
+    email_configs:
+      - to: '${ALERT_EMAIL_TO}'
+        from: '${ALERT_EMAIL_FROM}'
+        smarthost: '${ALERT_EMAIL_SMARTHOST}'
+        auth_username: '${ALERT_EMAIL_USER}'
+        auth_password: '${ALERT_EMAIL_PASSWORD}'
+        send_resolved: true
+        subject: '🔴 [CRITICAL] {{ .CommonLabels.alertname }} - {{ .CommonLabels.service }}'
+        html: |
+          <h2>🔴 Critical Alert</h2>
+          <p><strong>Alert:</strong> {{ .CommonLabels.alertname }}</p>
+          <p><strong>Service:</strong> {{ .CommonLabels.service }}</p>
+          <p><strong>Instance:</strong> {{ .CommonLabels.instance }}</p>
+          <hr>
+          {{ range .Alerts }}
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          {{ if .Annotations.runbook_url }}
+          <p><a href="{{ .Annotations.runbook_url }}">View Runbook</a></p>
+          {{ end }}
+          {{ end }}
+
+# ==================== INHIBIT RULES ====================
+# Suppress less severe alerts when more severe ones are firing
+
+inhibit_rules:
+  # Suppress warning if critical is firing for same alertname/service
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service', 'instance']
+  
+  # Suppress infrastructure warnings if app is down
+  - source_match:
+      alertname: 'CitarionAppDown'
+    target_match_re:
+      alertname: '.*'
+      service: 'infrastructure'
+    equal: ['instance']
+
+# ==================== TIME INTERVALS ====================
+# Define maintenance windows to suppress alerts
+
+time_intervals:
+  - name: 'business-hours'
+    time_intervals:
+      - weekdays: ['monday:friday']
+        times:
+          - start_time: '09:00'
+            end_time: '18:00'
+  
+  - name: 'maintenance-window'
+    time_intervals:
+      - weekdays: ['sunday']
+        times:
+          - start_time: '02:00'
+            end_time: '06:00'
+
+# ==================== MUTING RULES ====================
+# Mute alerts during maintenance windows
+
+mute_time_intervals:
+  - name: 'scheduled-maintenance'
+    time_intervals:
+      - weekdays: ['sunday']
+        times:
+          - start_time: '02:00'
+            end_time: '06:00'

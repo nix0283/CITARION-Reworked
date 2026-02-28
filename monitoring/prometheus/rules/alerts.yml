@@ -1,0 +1,164 @@
+# Prometheus Alerting Rules for CITARION
+#
+# Alerts for:
+# - Application health
+# - Performance issues
+# - Resource exhaustion
+# - Trading-specific alerts
+
+groups:
+  # ==================== APPLICATION ALERTS ====================
+  - name: citarion-app
+    rules:
+      # Application down
+      - alert: CitarionAppDown
+        expr: up{job="citarion-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: citarion
+        annotations:
+          summary: "CITARION application is down"
+          description: "Application instance {{ $labels.instance }} has been down for more than 1 minute"
+          runbook_url: "https://docs.citarion.app/runbooks/app-down"
+
+      # High error rate
+      - alert: CitarionHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="citarion-app",status=~"5.."}[5m])) 
+          / 
+          sum(rate(http_requests_total{job="citarion-app"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: citarion
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} on instance {{ $labels.instance }}"
+          runbook_url: "https://docs.citarion.app/runbooks/high-error-rate"
+
+      # High response time
+      - alert: CitarionHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(http_request_duration_seconds_bucket{job="citarion-app"}[5m])) by (le, endpoint)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: citarion
+        annotations:
+          summary: "High latency detected"
+          description: "95th percentile latency is {{ $value }}s for endpoint {{ $labels.endpoint }}"
+          runbook_url: "https://docs.citarion.app/runbooks/high-latency"
+
+  # ==================== TRADING ALERTS ====================
+  - name: citarion-trading
+    rules:
+      # Failed trade executions
+      - alert: CitarionTradeFailures
+        expr: |
+          increase(trade_executions_failed_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          service: trading
+        annotations:
+          summary: "High number of failed trade executions"
+          description: "{{ $value }} trade failures in the last 5 minutes"
+          runbook_url: "https://docs.citarion.app/runbooks/trade-failures"
+
+      # Exchange API errors
+      - alert: CitarionExchangeApiErrors
+        expr: |
+          increase(exchange_api_errors_total[5m]) > 20
+        for: 2m
+        labels:
+          severity: warning
+          service: exchange-api
+        annotations:
+          summary: "High number of exchange API errors"
+          description: "{{ $value }} API errors in the last 5 minutes for exchange {{ $labels.exchange }}"
+          runbook_url: "https://docs.citarion.app/runbooks/exchange-api-errors"
+
+      # Position sync delay
+      - alert: CitarionPositionSyncDelay
+        expr: |
+          time() - position_last_sync_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          service: position-sync
+        annotations:
+          summary: "Position sync is delayed"
+          description: "Position sync hasn't run for {{ $value | humanizeDuration }}"
+          runbook_url: "https://docs.citarion.app/runbooks/position-sync-delay"
+
+  # ==================== RESOURCE ALERTS ====================
+  - name: citarion-resources
+    rules:
+      # High memory usage
+      - alert: CitarionHighMemoryUsage
+        expr: |
+          (process_resident_memory_bytes{job="citarion-app"} / 1024 / 1024 / 1024) > 1.5
+        for: 5m
+        labels:
+          severity: warning
+          service: citarion
+        annotations:
+          summary: "High memory usage"
+          description: "Application is using {{ $value | humanize }}GB of memory"
+          runbook_url: "https://docs.citarion.app/runbooks/high-memory"
+
+      # High CPU usage
+      - alert: CitarionHighCpuUsage
+        expr: |
+          rate(process_cpu_seconds_total{job="citarion-app"}[5m]) > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: citarion
+        annotations:
+          summary: "High CPU usage"
+          description: "Application CPU usage is {{ $value | humanizePercentage }}"
+          runbook_url: "https://docs.citarion.app/runbooks/high-cpu"
+
+      # Disk space low
+      - alert: HostDiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+        for: 10m
+        labels:
+          severity: critical
+          service: infrastructure
+        annotations:
+          summary: "Disk space running low"
+          description: "Disk usage is above 90% on {{ $labels.instance }}"
+          runbook_url: "https://docs.citarion.app/runbooks/disk-space"
+
+  # ==================== LOGGING ALERTS ====================
+  - name: citarion-logging
+    rules:
+      # Loki ingestion errors
+      - alert: LokiIngestionErrors
+        expr: |
+          increase(loki_distributor_ingest_appended_samples_total{status="error"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: loki
+        annotations:
+          summary: "Loki ingestion errors"
+          description: "{{ $value }} log ingestion errors in the last 5 minutes"
+
+      # Promtail target down
+      - alert: PromtailTargetDown
+        expr: |
+          up{job="promtail"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: promtail
+        annotations:
+          summary: "Promtail target is down"
+          description: "Promtail instance {{ $labels.instance }} is not scraping logs"

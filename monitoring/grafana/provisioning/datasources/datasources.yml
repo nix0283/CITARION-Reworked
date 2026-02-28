@@ -1,0 +1,64 @@
+# Grafana Datasources Provisioning
+# Auto-configures Prometheus and Loki datasources
+
+apiVersion: 1
+
+datasources:
+  # ==================== PROMETHEUS ====================
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus-uid
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    version: 1
+    jsonData:
+      timeInterval: "15s"
+      queryTimeout: "30s"
+      httpMethod: "POST"
+      manageAlerts: true
+      prometheusType: "Prometheus"
+      prometheusVersion: "2.47.0"
+      cacheLevel: "High"
+    secureJsonData:
+      # Add auth here if needed
+      # httpHeaderValue1: ${PROMETHEUS_AUTH_TOKEN}
+
+  # ==================== LOKI ====================
+  - name: Loki
+    type: loki
+    uid: loki-uid
+    access: proxy
+    url: http://loki:3100
+    isDefault: false
+    editable: false
+    version: 1
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        # Link trace IDs to traces if using Jaeger/Tempo
+        - name: TraceID
+          matcherRegex: "trace_id=(\\w+)"
+          url: "${__value.raw}"
+          datasourceUid: tempo-uid
+        # Link request IDs to logs
+        - name: RequestID
+          matcherRegex: "requestId=([\\w-]+)"
+          url: "?query=requestId:${__value.raw}"
+          datasourceUid: loki-uid
+
+  # ==================== NODE EXPORTER (via Prometheus) ====================
+  - name: Node Exporter
+    type: prometheus
+    uid: node-exporter-uid
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: false
+    version: 1
+    jsonData:
+      timeInterval: "30s"
+      manageAlerts: false
+    # Filter to only show node exporter metrics in this datasource view
+    database: "node_exporter"

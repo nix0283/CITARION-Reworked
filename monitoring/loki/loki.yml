@@ -1,0 +1,92 @@
+# Loki Configuration for CITARION
+# 
+# Optimized for production use with:
+# - Retention policies
+# - Index and chunk settings
+# - Authentication (optional)
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# Query range limits
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+# Schema configuration
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+# Retention policies
+limits_config:
+  retention_period: 168h  # 7 days
+  max_entries_limit: 10000
+  max_query_length: 168h
+  ingestion_rate_mb: 16
+  ingestion_burst_size_mb: 32
+  
+  # Per-tenant limits (if auth enabled)
+  # per_tenant_override_config:
+  #   retention_period: 336h  # 14 days for specific tenants
+
+# Compaction settings
+compactor:
+  working_directory: /loki/compactor
+  shared_store: filesystem
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+
+# Table manager for index retention
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 168h
+
+# Ruler for alerting (optional)
+ruler:
+  alertmanager_url: http://alertmanager:9093
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+  rule_path: /loki/rules-temp
+  ring:
+    kvstore:
+      store: inmemory
+  enable_api: true
+
+# Pattern ingestion for structured logs
+pattern_ingester:
+  enabled: true
+  max_patterns: 10000
+
+# Analytics for usage tracking
+analytics:
+  reporting_enabled: false

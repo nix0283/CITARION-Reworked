@@ -1,0 +1,118 @@
+# Prometheus Configuration for CITARION
+# 
+# Scrapes metrics from:
+# - Application (/api/metrics)
+# - Node Exporter (host metrics)
+# - cAdvisor (container metrics)
+# - Loki (log metrics)
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'citarion-production'
+    environment: '${ENVIRONMENT:-production}'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          - alertmanager:9093
+      scheme: http
+      timeout: 10s
+      api_version: v2
+
+# Rule files for alerts
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Scrape configurations
+scrape_configs:
+  # ==================== APPLICATION METRICS ====================
+  - job_name: 'citarion-app'
+    metrics_path: '/api/metrics'
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: 'citarion'
+          component: 'api'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    # Retry on connection errors
+    honor_labels: true
+    relabel_configs:
+      # Add instance label from target
+      - source_labels: [__address__]
+        target_label: instance
+      # Filter out health check metrics if needed
+      - source_labels: [__name__]
+        regex: 'up|process_.*'
+        action: keep
+
+  # ==================== NODE EXPORTER (Host Metrics) ====================
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node'
+          component: 'host'
+    scrape_interval: 30s
+    metric_relabel_configs:
+      # Reduce cardinality by dropping some metrics
+      - source_labels: [__name__]
+        regex: 'node_filesystem_.*'
+        action: drop
+
+  # ==================== CADVISOR (Container Metrics) ====================
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'docker'
+          component: 'containers'
+    scrape_interval: 30s
+    metric_relabel_configs:
+      # Keep only useful container metrics
+      - source_labels: [__name__]
+        regex: 'container_.*_(memory|cpu|network|fs)_'
+        action: keep
+
+  # ==================== LOKI METRICS ====================
+  - job_name: 'loki'
+    static_configs:
+      - targets: ['loki:3100']
+        labels:
+          service: 'loki'
+          component: 'logging'
+    scrape_interval: 30s
+
+  # ==================== PROMETHEUS SELF-MONITORING ====================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
+    scrape_interval: 30s
+
+  # ==================== GRAFANA METRICS ====================
+  - job_name: 'grafana'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+          component: 'visualization'
+    scrape_interval: 30s
+
+# ==================== CUSTOM SCRAPE CONFIG FOR DOCKER HOST ====================
+# For Windows/Docker Desktop, use host.docker.internal
+- job_name: 'docker-host'
+  static_configs:
+    - targets: ['host.docker.internal:9100']
+      labels:
+        service: 'host'
+        component: 'windows'
+  scrape_interval: 30s
+  metrics_path: /metrics
+  scheme: http
