@@ -1,0 +1,652 @@
+openapi: 3.0.3
+info:
+  title: CITARION API
+  description: |
+    Продвинутая платформа автоматической торговли криптовалютой.
+    
+    ## Аутентификация
+    API использует API ключи для аутентификации. Добавляйте ключ в заголовок:
+    ```
+    X-API-Key: your-api-key-here
+    ```
+    
+    ## Rate Limiting
+    - Общие endpoints: 60 запросов/минуту
+    - Торговые endpoints: 10 запросов/минуту
+    
+    ## Ошибки
+    Все ошибки возвращаются в едином формате:
+    ```json
+    {
+      "error": "ERROR_CODE",
+      "code": "ERROR_CODE",
+      "message": "Человекочитаемое описание",
+      "details": {...},
+      "timestamp": "2026-02-24T12:00:00.000Z",
+      "requestId": "uuid-here"
+    }
+    ```
+  version: 1.4.0
+  contact:
+    name: CITARION Support
+    url: https://citarion.app/support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.citarion.app
+    description: Production
+  - url: http://localhost:3000
+    description: Development
+
+tags:
+  - name: Trading
+    description: Операции с позициями и сделками
+  - name: Bots
+    description: Управление торговыми ботами
+  - name: Signals
+    description: Работа с торговыми сигналами
+  - name: Webhooks
+    description: Интеграции с внешними сервисами
+  - name: Account
+    description: Управление аккаунтом и настройками
+
+# ==================== SCHEMAS ====================
+
+components:
+  schemas:
+    # Common Types
+    Symbol:
+      type: string
+      pattern: '^[A-Z0-9]+\/?[A-Z0-9]+$'
+      example: BTCUSDT
+    
+    Direction:
+      type: string
+      enum: [LONG, SHORT]
+    
+    MarketType:
+      type: string
+      enum: [spot, futures, inverse]
+      default: futures
+    
+    OrderType:
+      type: string
+      enum: [market, limit]
+      default: market
+    
+    TradingMode:
+      type: string
+      enum: [LIVE, TESTNET, DEMO]
+      default: DEMO
+    
+    # Request/Response
+    TradeRequest:
+      type: object
+      required: [symbol, direction, amount, leverage]
+      properties:
+        symbol:
+          $ref: '#/components/schemas/Symbol'
+        direction:
+          $ref: '#/components/schemas/Direction'
+        amount:
+          type: number
+          minimum: 0.001
+          description: Amount in USDT
+        leverage:
+          type: integer
+          minimum: 1
+          maximum: 125
+        stopLoss:
+          type: number
+          nullable: true
+        takeProfit:
+          type: number
+          nullable: true
+        isDemo:
+          type: boolean
+          default: true
+        accountId:
+          type: string
+          format: cuid
+        exchangeId:
+          type: string
+          enum: [binance, bybit, okx, bitget, kucoin, bingx, coinbase, huobi, hyperliquid, bitmex, blofin]
+        orderType:
+          $ref: '#/components/schemas/OrderType'
+        price:
+          type: number
+          description: Required for limit orders
+        clientOrderId:
+          type: string
+          maxLength: 64
+        tradingMode:
+          $ref: '#/components/schemas/TradingMode'
+    
+    TradeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        trade:
+          type: object
+          properties:
+            id:
+              type: string
+              format: cuid
+            symbol:
+              $ref: '#/components/schemas/Symbol'
+            direction:
+              $ref: '#/components/schemas/Direction'
+            entryPrice:
+              type: number
+            amount:
+              type: number
+            leverage:
+              type: integer
+            status:
+              type: string
+              enum: [PENDING, OPEN, CLOSED]
+        position:
+          type: object
+          properties:
+            id:
+              type: string
+            symbol:
+              $ref: '#/components/schemas/Symbol'
+            direction:
+              $ref: '#/components/schemas/Direction'
+            totalAmount:
+              type: number
+            avgEntryPrice:
+              type: number
+            leverage:
+              type: integer
+            stopLoss:
+              type: number
+              nullable: true
+            takeProfit:
+              type: number
+              nullable: true
+            liquidationPrice:
+              type: number
+            margin:
+              type: number
+            fee:
+              type: number
+            unrealizedPnl:
+              type: number
+        balance:
+          type: object
+          additionalProperties:
+            type: number
+        tradingMode:
+          $ref: '#/components/schemas/TradingMode'
+        isDemo:
+          type: boolean
+        message:
+          type: string
+    
+    BotConfigRequest:
+      type: object
+      required: [name, exchangeId]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        isActive:
+          type: boolean
+          default: false
+        exchangeId:
+          type: string
+        exchangeType:
+          $ref: '#/components/schemas/MarketType'
+        tradeAmount:
+          type: number
+          minimum: 0.001
+        amountType:
+          type: string
+          enum: [FIXED, PERCENTAGE]
+          default: FIXED
+        leverage:
+          type: integer
+          minimum: 1
+          maximum: 125
+          default: 1
+        defaultStopLoss:
+          type: number
+          minimum: 0
+          maximum: 100
+        trailingEnabled:
+          type: boolean
+          default: false
+        trailingValue:
+          type: number
+          minimum: 0
+          maximum: 100
+        notifyOnEntry:
+          type: boolean
+          default: true
+        notifyOnExit:
+          type: boolean
+          default: true
+    
+    SignalRequest:
+      type: object
+      required: [text, source]
+      properties:
+        text:
+          type: string
+          description: Signal text in Cornix format
+          example: '#BTCUSDT LONG Entry: 67000 TP: 70000 SL: 65000'
+        source:
+          type: string
+          enum: [TELEGRAM, DISCORD, TRADINGVIEW, MANUAL, APP]
+          default: API
+    
+    # Error Response
+    ErrorResponse:
+      type: object
+      required: [error, timestamp]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+        requestId:
+          type: string
+          format: uuid
+    
+    # Error Codes
+    ErrorCodes:
+      type: string
+      enum:
+        - VALIDATION_ERROR
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - RATE_LIMITED
+        - CONFLICT
+        - INTERNAL_ERROR
+        - DATABASE_ERROR
+        - EXCHANGE_ERROR
+        - TIMEOUT_ERROR
+        - INSUFFICIENT_BALANCE
+        - INVALID_ORDER
+        - POSITION_NOT_FOUND
+        - SIGNAL_EXECUTION_FAILED
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key for authentication
+    
+    TradingViewSignature:
+      type: apiKey
+      in: header
+      name: X-TradingView-Signature
+      description: HMAC-SHA256 signature for TradingView webhooks
+
+  parameters:
+    SymbolParam:
+      name: symbol
+      in: query
+      schema:
+        $ref: '#/components/schemas/Symbol'
+      required: false
+      description: Trading pair symbol
+    
+    DirectionParam:
+      name: direction
+      in: query
+      schema:
+        $ref: '#/components/schemas/Direction'
+      required: false
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: VALIDATION_ERROR
+            code: VALIDATION_ERROR
+            message: Validation failed
+            details:
+              fieldErrors:
+                leverage: ["Leverage must be at most 125"]
+            timestamp: "2026-02-24T12:00:00.000Z"
+    
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+        Retry-After:
+          schema:
+            type: integer
+    
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+# ==================== PATHS ====================
+
+paths:
+  /api/health:
+    get:
+      summary: Health check endpoint
+      description: Returns service health status for monitoring
+      tags: [System]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded, unhealthy]
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                  uptime:
+                    type: integer
+                  checks:
+                    type: object
+                    properties:
+                      database:
+                        type: string
+                        enum: [ok, error]
+                      memory:
+                        type: string
+                        enum: [ok, warning, critical]
+        '503':
+          description: Service is unhealthy
+  
+  /api/trade/open:
+    post:
+      summary: Open a new trade position
+      description: Creates a new trading position (demo or live)
+      tags: [Trading]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TradeRequest'
+      responses:
+        '200':
+          description: Trade opened successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TradeResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  
+  /api/trade/close:
+    post:
+      summary: Close a position
+      tags: [Trading]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positionId]
+              properties:
+                positionId:
+                  type: string
+                  format: cuid
+                amount:
+                  type: number
+                  description: Amount for partial close (optional)
+      responses:
+        '200':
+          description: Position closed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Position not found
+  
+  /api/bot/config:
+    get:
+      summary: Get bot configuration(s)
+      tags: [Bots]
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+          description: Specific config ID
+        - name: accountId
+          in: query
+          schema:
+            type: string
+          description: Filter by account
+      responses:
+        '200':
+          description: Bot configurations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  config:
+                    type: object
+                  configs:
+                    type: array
+                    items:
+                      type: object
+                  count:
+                    type: integer
+    post:
+      summary: Create or update bot configuration
+      tags: [Bots]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BotConfigRequest'
+      responses:
+        '200':
+          description: Configuration saved
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  
+  /api/signal:
+    post:
+      summary: Parse and save a trading signal
+      description: Parses signal text in Cornix format and saves to database
+      tags: [Signals]
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignalRequest'
+      responses:
+        '200':
+          description: Signal parsed and saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  signalId:
+                    type: integer
+                  signal:
+                    type: object
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      summary: List signals
+      tags: [Signals]
+      parameters:
+        - $ref: '#/components/parameters/SymbolParam'
+        - $ref: '#/components/parameters/DirectionParam'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, ACTIVE, FILLED, CLOSED, CANCELLED]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+      responses:
+        '200':
+          description: List of signals
+  
+  /api/webhook/tradingview:
+    post:
+      summary: TradingView webhook endpoint
+      description: Receives trading signals from TradingView alerts
+      tags: [Webhooks]
+      security:
+        - TradingViewSignature: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [symbol, action]
+              properties:
+                symbol:
+                  $ref: '#/components/schemas/Symbol'
+                action:
+                  type: string
+                  enum: [buy, sell, close]
+                direction:
+                  $ref: '#/components/schemas/Direction'
+                price:
+                  type: number
+                stopLoss:
+                  type: number
+                takeProfit:
+                  type: number
+                takeProfits:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      price:
+                        type: number
+                      percentage:
+                        type: number
+                leverage:
+                  type: integer
+                  minimum: 1
+                  maximum: 125
+      responses:
+        '200':
+          description: Signal processed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid signature
+  
+  /api/telegram/webhook:
+    post:
+      summary: Telegram bot webhook
+      description: Receives updates from Telegram bot
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                update_id:
+                  type: integer
+                message:
+                  type: object
+                callback_query:
+                  type: object
+      responses:
+        '200':
+          description: Update processed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    default: true
+
+# ==================== SECURITY ====================
+
+security:
+  - ApiKeyAuth: []
